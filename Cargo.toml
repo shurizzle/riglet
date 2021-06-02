@@ -15,4 +15,5 @@ thiserror = "1.0.25"
 figfont = { git = "https://github.com/shurizzle/rust-figfont" }
 
 [features]
+default = ["zip"]
 zip = ["figfont/zip"]
