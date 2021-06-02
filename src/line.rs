@@ -350,13 +350,14 @@ impl<'a> FIGline<'a> {
 
 impl<'a> Display for FIGline<'a> {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        let res: Vec<String> = self
-            .lines
-            .iter()
-            .map(|line| line.iter().map(ToString::to_string).collect::<String>())
-            .collect();
+        for line in self.lines.iter() {
+            for ch in line {
+                write!(fmt, "{}", ch)?;
+            }
+            write!(fmt, "\n")?;
+        }
 
-        write!(fmt, "{}", res.join("\n"))
+        Ok(())
     }
 }
 
@@ -371,7 +372,7 @@ mod tests {
         let font = FIGfont::standard().unwrap();
         let mut line = FIGline::new(&font);
         let chars = ISO_8859_1
-            .encode("CiT", encoding::EncoderTrap::Replace)
+            .encode("CiTè", encoding::EncoderTrap::Replace)
             .unwrap();
         for c in chars {
             line.add_char(c as i32);
