@@ -223,7 +223,7 @@ fn space_smush(c1: &SubCharacter, c2: &SubCharacter) -> Option<SubCharacter> {
     }
 }
 
-fn controller_smush(
+fn controlled_smush(
     line1: &mut Vec<SubCharacter>,
     line2: &Vec<SubCharacter>,
     layout: Layout,
@@ -290,7 +290,7 @@ fn get_smush_char(
     {
         universal_smush(line1, line2, layout)
     } else {
-        controller_smush(line1, line2, layout)
+        controlled_smush(line1, line2, layout)
     }
 }
 
