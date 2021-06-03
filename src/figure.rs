@@ -4,7 +4,7 @@ use std::{
 };
 
 use encoding::{all::ISO_8859_1, Encoding};
-use figfont::FIGfont;
+use figfont::{FIGfont, PrintDirection};
 
 use crate::{line::FIGline, utils::SplitWords};
 
@@ -82,7 +82,21 @@ impl<'a> FIGure<'a> {
 impl<'a> Display for FIGure<'a> {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         for line in self.lines.iter() {
-            write!(fmt, "{}\n", line)?;
+            for line in line.lines().iter() {
+                match self.font.header().print_direction() {
+                    PrintDirection::RightToLeft => {
+                        let width: usize = line.iter().map(|c| c.width()).sum();
+                        for _ in 0..(self.width - width) {
+                            write!(fmt, " ")?;
+                        }
+                    }
+                    _ => (),
+                }
+                for c in line.iter() {
+                    write!(fmt, "{}", c)?;
+                }
+                write!(fmt, "\n")?;
+            }
         }
         Ok(())
     }

@@ -1,4 +1,4 @@
 #[test]
 fn {name}() {{
-    run_test({path:?}, "Ciao")
+    run_test(80usize, {path:?}, "Ciao")
 }}

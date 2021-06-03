@@ -1,9 +1,9 @@
 use std::{
-    borrow::Borrow,
+    borrow::{Borrow, Cow},
     fmt::{Display, Formatter},
 };
 
-use figfont::{header::Layout, subcharacter::SubCharacter, FIGfont};
+use figfont::{header::Layout, subcharacter::SubCharacter, FIGfont, PrintDirection};
 
 #[derive(Clone)]
 pub struct FIGline<'a> {
@@ -21,7 +21,16 @@ fn is_space(c: &SubCharacter) -> bool {
 }
 
 #[inline]
-fn _max_kerning(c1: &Vec<SubCharacter>, c2: &Vec<SubCharacter>) -> usize {
+fn _max_kerning(
+    c1: &Vec<SubCharacter>,
+    c2: &Vec<SubCharacter>,
+    direction: PrintDirection,
+) -> usize {
+    let (c1, c2) = match direction {
+        PrintDirection::LeftToRight => (c1, c2),
+        PrintDirection::RightToLeft => (c2, c1),
+    };
+
     let mut k1 = 0;
     for sch in c1.iter().rev() {
         if is_space(sch) {
@@ -44,18 +53,32 @@ fn _max_kerning(c1: &Vec<SubCharacter>, c2: &Vec<SubCharacter>) -> usize {
 }
 
 #[inline]
-fn max_kerning(c1: &Vec<Vec<SubCharacter>>, c2: &Vec<Vec<SubCharacter>>) -> usize {
+fn max_kerning(
+    c1: &Vec<Vec<SubCharacter>>,
+    c2: &Vec<Vec<SubCharacter>>,
+    direction: PrintDirection,
+) -> usize {
     let mut kern = c1[0].len();
 
     for i in 0..c1.len() {
-        kern = std::cmp::min(kern, _max_kerning(&c1[i], &c2[i]));
+        kern = std::cmp::min(kern, _max_kerning(&c1[i], &c2[i], direction));
     }
 
     kern
 }
 
 #[inline]
-fn __apply_kerning(c1: &mut Vec<SubCharacter>, c2: &mut Vec<SubCharacter>, mut n: usize) {
+fn __apply_kerning(
+    c1: &mut Vec<SubCharacter>,
+    c2: &mut Vec<SubCharacter>,
+    mut n: usize,
+    direction: PrintDirection,
+) {
+    let (c1, c2) = match direction {
+        PrintDirection::LeftToRight => (c1, c2),
+        PrintDirection::RightToLeft => (c2, c1),
+    };
+
     while !c1.is_empty() && is_space(c1.last().unwrap()) && n > 0 {
         c1.truncate(c1.len() - 1);
         n -= 1;
@@ -68,18 +91,27 @@ fn __apply_kerning(c1: &mut Vec<SubCharacter>, c2: &mut Vec<SubCharacter>, mut n
 }
 
 #[inline]
-fn _apply_kerning(c1: &mut Vec<Vec<SubCharacter>>, c2: &mut Vec<Vec<SubCharacter>>, n: usize) {
+fn _apply_kerning(
+    c1: &mut Vec<Vec<SubCharacter>>,
+    c2: &mut Vec<Vec<SubCharacter>>,
+    n: usize,
+    direction: PrintDirection,
+) {
     for i in 0..c1.len() {
-        __apply_kerning(&mut c1[i], &mut c2[i], n);
+        __apply_kerning(&mut c1[i], &mut c2[i], n, direction);
     }
 }
 
 #[inline]
-fn apply_kerning(c1: &mut Vec<Vec<SubCharacter>>, c2: &mut Vec<Vec<SubCharacter>>) {
-    let kern = max_kerning(c1, c2);
+fn apply_kerning(
+    c1: &mut Vec<Vec<SubCharacter>>,
+    c2: &mut Vec<Vec<SubCharacter>>,
+    direction: PrintDirection,
+) {
+    let kern = max_kerning(c1, c2, direction);
 
     if kern > 0 {
-        _apply_kerning(c1, c2, kern);
+        _apply_kerning(c1, c2, kern, direction);
     }
 }
 
@@ -92,12 +124,29 @@ fn max_ltrim(c: &mut Vec<Vec<SubCharacter>>) -> usize {
 }
 
 #[inline]
+fn max_rtrim(c: &mut Vec<Vec<SubCharacter>>) -> usize {
+    c.iter()
+        .map(|line| line.iter().rev().take_while(|&c| is_space(c)).count())
+        .min()
+        .unwrap_or(0)
+}
+
+#[inline]
 fn ltrim(c: &mut Vec<Vec<SubCharacter>>) {
     let max = max_ltrim(c);
     for line in c {
         for _ in 0..max {
             line.remove(0);
         }
+    }
+}
+
+#[inline]
+fn rtrim(c: &mut Vec<Vec<SubCharacter>>) {
+    let max = max_rtrim(c);
+    for line in c {
+        let len = line.len() - max;
+        line.truncate(len);
     }
 }
 
@@ -224,7 +273,7 @@ fn space_smush(c1: &SubCharacter, c2: &SubCharacter) -> Option<SubCharacter> {
 }
 
 fn controlled_smush(
-    line1: &mut Vec<SubCharacter>,
+    line1: &Vec<SubCharacter>,
     line2: &Vec<SubCharacter>,
     layout: Layout,
 ) -> Option<SubCharacter> {
@@ -260,7 +309,7 @@ fn controlled_smush(
 }
 
 fn universal_smush(
-    line1: &mut Vec<SubCharacter>,
+    line1: &Vec<SubCharacter>,
     line2: &Vec<SubCharacter>,
     _: Layout,
 ) -> Option<SubCharacter> {
@@ -274,7 +323,7 @@ fn universal_smush(
 }
 
 fn get_smush_char(
-    line1: &mut Vec<SubCharacter>,
+    line1: &Vec<SubCharacter>,
     line2: &Vec<SubCharacter>,
     layout: Layout,
 ) -> Option<SubCharacter> {
@@ -297,12 +346,17 @@ fn get_smush_char(
 fn apply_smushing(
     ch1: &mut Vec<Vec<SubCharacter>>,
     mut ch2: Vec<Vec<SubCharacter>>,
+    direction: PrintDirection,
     layout: Layout,
 ) {
     let mut smush_chars: Vec<Option<SubCharacter>> = Vec::with_capacity(ch1.len());
     if needs_smushing(layout) {
         for i in 0..ch1.len() {
-            smush_chars.push(get_smush_char(&mut ch1[i], &ch2[i], layout));
+            let (c1, c2) = match direction {
+                PrintDirection::LeftToRight => (&ch1[i], &ch2[i]),
+                PrintDirection::RightToLeft => (&ch2[i], &ch1[i]),
+            };
+            smush_chars.push(get_smush_char(c1, c2, layout));
         }
     } else {
         for _ in 0..ch1.len() {
@@ -313,20 +367,57 @@ fn apply_smushing(
     if smush_chars.iter().all(Option::is_some) {
         let smush_chars: Vec<SubCharacter> = smush_chars.into_iter().map(Option::unwrap).collect();
 
-        for i in 0..ch1.len() {
-            ch2[i].remove(0);
-            let l = ch1[i].len();
-            ch1[i].truncate(l - 1);
-            ch1[i].push(smush_chars[i].clone());
+        match direction {
+            PrintDirection::LeftToRight => {
+                for i in 0..ch1.len() {
+                    ch2[i].remove(0);
+                    let l = ch1[i].len();
+                    ch1[i].truncate(l - 1);
+                    ch1[i].push(smush_chars[i].clone());
 
-            for sch in ch2[i].iter() {
-                ch1[i].push(sch.clone());
+                    for sch in ch2[i].iter() {
+                        ch1[i].push(sch.clone());
+                    }
+                }
+            }
+            PrintDirection::RightToLeft => {
+                for i in 0..ch1.len() {
+                    let l = ch2[i].len();
+                    ch2[i].truncate(l - 1);
+                    ch1[i].remove(0);
+
+                    let mut tmp = Vec::new();
+                    for sch in ch2[i].iter() {
+                        tmp.push(sch.clone());
+                    }
+                    tmp.push(smush_chars[i].clone());
+                    for sch in ch1[i].iter() {
+                        tmp.push(sch.clone());
+                    }
+                    ch1[i] = tmp;
+                }
             }
         }
     } else {
-        for i in 0..ch1.len() {
-            for sch in ch2[i].iter() {
-                ch1[i].push(sch.clone());
+        match direction {
+            PrintDirection::LeftToRight => {
+                for i in 0..ch1.len() {
+                    for sch in ch2[i].iter() {
+                        ch1[i].push(sch.clone());
+                    }
+                }
+            }
+            PrintDirection::RightToLeft => {
+                for i in 0..ch1.len() {
+                    let mut tmp = Vec::new();
+                    for sch in ch2[i].iter() {
+                        tmp.push(sch.clone());
+                    }
+                    for sch in ch1[i].iter() {
+                        tmp.push(sch.clone());
+                    }
+                    ch1[i] = tmp;
+                }
             }
         }
     }
@@ -354,7 +445,10 @@ impl<'a> FIGline<'a> {
             let mut lines = ch.lines().into_owned();
 
             if needs_kerning(self.font.header().layout()) {
-                ltrim(&mut lines);
+                match self.font.header().print_direction() {
+                    figfont::PrintDirection::LeftToRight => ltrim(&mut lines),
+                    figfont::PrintDirection::RightToLeft => rtrim(&mut lines),
+                }
             }
 
             for (i, line) in lines.iter().enumerate() {
@@ -364,8 +458,17 @@ impl<'a> FIGline<'a> {
             }
         } else {
             let mut ch = self.font.get(ch).lines().into_owned();
-            apply_kerning(&mut self.lines, &mut ch);
-            apply_smushing(&mut self.lines, ch, self.font.header().layout());
+            apply_kerning(
+                &mut self.lines,
+                &mut ch,
+                self.font.header().print_direction(),
+            );
+            apply_smushing(
+                &mut self.lines,
+                ch,
+                self.font.header().print_direction(),
+                self.font.header().layout(),
+            );
         }
     }
 
@@ -385,8 +488,17 @@ impl<'a> FIGline<'a> {
                 self.chars.push(*c);
             }
             let mut ch = line.lines.clone();
-            apply_kerning(&mut self.lines, &mut ch);
-            apply_smushing(&mut self.lines, ch, self.font.header().layout());
+            apply_kerning(
+                &mut self.lines,
+                &mut ch,
+                self.font.header().print_direction(),
+            );
+            apply_smushing(
+                &mut self.lines,
+                ch,
+                self.font.header().print_direction(),
+                self.font.header().layout(),
+            );
         }
     }
 
@@ -404,6 +516,10 @@ impl<'a> FIGline<'a> {
 
     pub fn is_empty(&self) -> bool {
         self.chars.is_empty()
+    }
+
+    pub fn lines(&'a self) -> Cow<'a, Vec<Vec<SubCharacter>>> {
+        Cow::Borrowed(&self.lines)
     }
 }
 
