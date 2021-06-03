@@ -84,6 +84,24 @@ fn apply_kerning(c1: &mut Vec<Vec<SubCharacter>>, c2: &mut Vec<Vec<SubCharacter>
 }
 
 #[inline]
+fn max_ltrim(c: &mut Vec<Vec<SubCharacter>>) -> usize {
+    c.iter()
+        .map(|line| line.iter().take_while(|&c| is_space(c)).count())
+        .min()
+        .unwrap_or(0)
+}
+
+#[inline]
+fn ltrim(c: &mut Vec<Vec<SubCharacter>>) {
+    let max = max_ltrim(c);
+    for line in c {
+        for _ in 0..max {
+            line.remove(0);
+        }
+    }
+}
+
+#[inline]
 fn needs_smushing(layout: Layout) -> bool {
     layout.contains(Layout::HORIZONTAL_SMUSH)
 }
@@ -205,7 +223,7 @@ fn space_smush(c1: &SubCharacter, c2: &SubCharacter) -> Option<SubCharacter> {
     }
 }
 
-fn get_smush_char(
+fn controller_smush(
     line1: &mut Vec<SubCharacter>,
     line2: &Vec<SubCharacter>,
     layout: Layout,
@@ -239,6 +257,41 @@ fn get_smush_char(
     apply!(hardblank_smush, HORIZONTAL_HARDBLANK);
 
     None
+}
+
+fn universal_smush(
+    line1: &mut Vec<SubCharacter>,
+    line2: &Vec<SubCharacter>,
+    _: Layout,
+) -> Option<SubCharacter> {
+    match line2.first() {
+        Some(c) => Some(c.clone()),
+        None => match line1.last() {
+            Some(c) => Some(c.clone()),
+            None => None,
+        },
+    }
+}
+
+fn get_smush_char(
+    line1: &mut Vec<SubCharacter>,
+    line2: &Vec<SubCharacter>,
+    layout: Layout,
+) -> Option<SubCharacter> {
+    if (layout
+        & (Layout::HORIZONTAL_EQUAL
+            | Layout::HORIZONTAL_LOWLINE
+            | Layout::HORIZONTAL_HIERARCHY
+            | Layout::HORIZONTAL_PAIR
+            | Layout::HORIZONTAL_BIGX
+            | Layout::HORIZONTAL_HARDBLANK
+            | Layout::HORIZONTAL_SMUSH))
+        == Layout::HORIZONTAL_SMUSH
+    {
+        universal_smush(line1, line2, layout)
+    } else {
+        controller_smush(line1, line2, layout)
+    }
 }
 
 fn apply_smushing(
@@ -296,9 +349,15 @@ impl<'a> FIGline<'a> {
     pub fn add_char(&mut self, ch: i32) {
         let is_empty = self.chars.is_empty();
         self.chars.push(ch);
-        if is_empty || !needs_kerning(self.font.header().layout()) {
+        if is_empty {
             let ch = self.font.get(ch);
-            for (i, line) in ch.lines().iter().enumerate() {
+            let mut lines = ch.lines().into_owned();
+
+            if needs_kerning(self.font.header().layout()) {
+                ltrim(&mut lines);
+            }
+
+            for (i, line) in lines.iter().enumerate() {
                 for sch in line {
                     self.lines[i].push(sch.clone());
                 }
@@ -350,11 +409,14 @@ impl<'a> FIGline<'a> {
 
 impl<'a> Display for FIGline<'a> {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        for line in self.lines.iter() {
+        for (i, line) in self.lines.iter().enumerate() {
+            if i != 0 {
+                write!(fmt, "\n")?;
+            }
+
             for ch in line {
                 write!(fmt, "{}", ch)?;
             }
-            write!(fmt, "\n")?;
         }
 
         Ok(())
@@ -368,7 +430,7 @@ mod tests {
     use figfont::FIGfont;
 
     #[test]
-    fn test() {
+    fn line_test() {
         let font = FIGfont::standard().unwrap();
         let mut line = FIGline::new(&font);
         let chars = ISO_8859_1

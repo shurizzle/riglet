@@ -1,0 +1,4 @@
+#[test]
+fn {name}() {{
+    run_test({path:?}, "Ciao")
+}}
