@@ -11,9 +11,6 @@ encoding = "0.2.33"
 figfont = "0.1.0"
 thiserror = "1.0.25"
 
-[patch.crates-io]
-figfont = { git = "https://github.com/shurizzle/rust-figfont", branch = "main" }
-
 [features]
 default = ["zip"]
 zip = ["figfont/zip"]
