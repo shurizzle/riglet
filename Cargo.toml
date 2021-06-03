@@ -8,7 +8,7 @@ license = "WTFPL"
 
 [dependencies]
 encoding = "0.2.33"
-figfont = "0.1.0"
+figfont = "0.1.1"
 thiserror = "1.0.25"
 
 [dev-dependencies]

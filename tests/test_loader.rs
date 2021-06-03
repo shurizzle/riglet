@@ -22,7 +22,6 @@ fn run_test<S1: AsRef<str>, S2: AsRef<str>>(font: S1, text: S2) {
     let font = FIGfont::load_from(font.as_ref());
     assert!(font.is_ok());
     let font = font.unwrap();
-    eprintln!("{:?}", font.header().layout());
     let mut figure = FIGure::new(&font, 80);
     assert!(figure.add(text.as_ref()).is_ok());
     let r_res: String = figure.to_string();
