@@ -12,27 +12,23 @@ fn main() {
     generate().unwrap();
 }
 
-const VERSION: &'static str = "2.2.5";
-
 fn output() -> PathBuf {
     PathBuf::from(env::var("OUT_DIR").unwrap())
 }
 
 fn source() -> PathBuf {
-    output().join(format!("figlet-{}", VERSION))
+    output().join("figlet")
 }
 
 fn fetch() -> io::Result<()> {
     let output_base_path = output();
-    let clone_dest_dir = format!("figlet-{}", VERSION);
+    let clone_dest_dir = "figlet".to_owned();
     let _ = std::fs::remove_dir_all(output_base_path.join(&clone_dest_dir));
 
     let status = Command::new("git")
         .current_dir(&output_base_path)
         .arg("clone")
         .arg("--depth=1")
-        .arg("-b")
-        .arg(VERSION)
         .arg("https://github.com/cmatsuoka/figlet")
         .arg(&clone_dest_dir)
         .status()?;
