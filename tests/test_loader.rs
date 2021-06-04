@@ -5,6 +5,17 @@ use std::{process::Stdio, str};
 use riglet::{FIGfont, FIGure};
 use run_figlet::RunFiglet;
 
+fn chop(s: &str) -> String {
+    let mut s = s.to_string();
+    if s.ends_with("\r\n") {
+        s.truncate(s.len() - 2);
+    } else if s.ends_with("\n") {
+        s.truncate(s.len() - 1);
+    }
+
+    s
+}
+
 fn run_test<S1: AsRef<str>, S2: AsRef<str>>(width: usize, font: S1, text: S2) {
     let cmd_res = RunFiglet::new()
         .stderr(Stdio::null())
@@ -28,10 +39,24 @@ fn run_test<S1: AsRef<str>, S2: AsRef<str>>(width: usize, font: S1, text: S2) {
     assert!(figure.add(text.as_ref()).is_ok());
     let r_res: String = figure.to_string();
 
-    let cmd_lines: Vec<&str> = cmd_res.lines().collect();
-    let r_lines: Vec<&str> = r_res.lines().collect();
+    let cmd_lines: Vec<String> = cmd_res.lines().map(|s| chop(s)).collect();
+    let r_lines: Vec<String> = r_res.lines().map(|s| chop(s)).collect();
 
-    assert_eq!(cmd_lines, r_lines);
+    if cmd_lines != r_lines {
+        for line in cmd_lines.iter() {
+            println!("{}", line);
+        }
+
+        println!("");
+
+        for line in r_lines.iter() {
+            println!("{}", line);
+        }
+
+        panic!();
+    }
+
+    //assert_eq!(cmd_lines, r_lines);
 }
 
 include!(concat!(env!("OUT_DIR"), "/tests.rs"));
